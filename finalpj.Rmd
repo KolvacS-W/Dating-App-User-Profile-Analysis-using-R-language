@@ -1,0 +1,207 @@
+---
+title: "finalpj544"
+output: html_document
+date: "2022-12-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## input packages
+```{r}
+library(tidyverse)
+library(infer)
+library(moderndive)
+library(ggplot2)
+library(dplyr)
+```
+## 1. Introduction of dataset
+Modern social apps emphasize on the mutuality of attraction before allowing any two people to get in touch and chat. This made it all the more important to create the best profile in order to get the best first impression.
+The dataset is around 4000 user profiles on a dating app called Lovoo.
+The dataset was gathered during spring 2015 (april, may). At that time, Lovoo was expanding in european countries (among others), while Tinder was trending both in America and in Europe.
+At that time the iOS version of the Lovoo app was in version 3.
+All the user in the dataset are female users.
+
+Data source: https://www.kaggle.com/datasets/jmmvutu/dating-app-lovoo-user-profiles
+
+The aim of this project is to explore the data of user profiles of this popular dating app, and try to find some interesting statistical data and explore what variables in user profiles have important relationships.
+
+```{r}
+datingappuser <- read_csv('/Users/wujiaqi/Downloads/archive (1)/lovoo_v3_users_api-results.csv')
+View(datingappuser)
+```
+
+## 2. data wrangling
+
+```{r}
+## Get a new dataset to work on; In this project I only focus on certain information of these accounts. Also since all the users are female, Gender info is not necessary.
+# age: age of user
+# counts_details: how many details the user profile has
+# counts_pictures:how many pictures the user profile has
+# counts_profileVisits: how many visits does the user profile have
+# counts_kisses: how many likes does the user profile have
+# counts_fans: how many fans does the user profile have
+# country: the user's country
+# verified: if the user profile is verified
+# is Mobile: if the user use a mobile device
+# flirtInterests_date: if the user is interested on dating
+
+selecteduserdata <- datingappuser %>%
+  select(age, counts_details, counts_pictures, counts_profileVisits, counts_kisses, counts_fans, country, verified, isMobile, flirtInterests_date)
+glimpse(selecteduserdata)
+
+## See the mean and standard deviation of number of kisses(liked by other users) of user profiles.
+sumeduserdata <-  datingappuser %>%
+  summarise(mean = mean(counts_kisses), std_dev = sd(counts_kisses))
+sumeduserdata
+```
+
+## 3. Visualization
+
+#### check the flirt interest of dating by user age
+```{r}
+
+ggplot(data = selecteduserdata, mapping = aes(x = age, fill = flirtInterests_date)) +
+geom_bar()
+
+```
+#### generally, ages are evenly distributed.
+
+#### Now use boxplot to better check how the age is distributed in the flirt interest of dating
+```{r}
+ggplot(data = selecteduserdata, mapping = aes(x = flirtInterests_date, y = age)) +
+geom_boxplot()
+ 
+```
+#### the result show slightly trend that older users tend to have more interest on dating than younger ones.
+
+#### what about age and account verification?
+```{r}
+
+ggplot(data = selecteduserdata, mapping = aes(x = factor(verified), y = age)) +
+geom_boxplot()
+
+```
+#### it is strange that it seems older users tend not to verify accounts.
+
+
+####now see the age of users by countries
+```{r}
+ggplot(data = selecteduserdata, mapping = aes(x = factor(country), y = age)) +
+geom_boxplot()
+```
+#### it is interesting to see that Australia and Canada have many  younger users. The variance of user ages is the biggest in Austria and UK.
+
+#### check the relationship between profile details and number of kisses(liked by other users)
+```{r}
+
+ggplot(selecteduserdata, aes(x = counts_details, y = counts_kisses, color = verified)) +
+  geom_point()+
+  ylim(0, 5000)+
+  geom_smooth(method = lm)
+
+```
+####  it seems not much of a relationship
+
+#### now check profile pictures and profile visits
+```{r}
+ggplot(selecteduserdata, aes(x = counts_pictures, y = counts_profileVisits)) +
+  geom_point()+
+  ylim(0, 100000)+
+  geom_smooth(method = lm)
+
+# now only check verified users:
+verifiedusers = selecteduserdata %>% 
+  filter(verified == 1)
+
+ggplot(verifiedusers, aes(x = counts_pictures, y = counts_profileVisits, color = verified)) +
+  geom_point()+
+  ylim(0, 100000)+ #eliminate extreme data
+  geom_smooth(method = lm)
+```
+
+## 4. fit a liner model
+#### now fit a liner model on the relationship between number of pictures and profile visits (on verified user profiles).
+```{r}
+
+model <- lm(counts_profileVisits ~ counts_pictures, data = verifiedusers)
+get_regression_summaries(model)
+get_regression_table(model)
+```
+### counts_profileVisits = 739.453*counts_pictures + 1310.158
+
+## test the model: 
+
+#### Independence of the residuals
+```{r}
+# Independence of the residuals
+regression_point = get_regression_points(model)
+ggplot(regression_point, aes(x = counts_pictures, y = residual)) +
+  geom_point()+
+  geom_smooth(method = lm)
+# seems no strong relationship between residual and x variable.
+```
+#### seems no strong relationship between residual and x variable.
+
+#### Normality of the residuals
+```{r}
+# Normality of the residuals
+ggplot(regression_point, aes(x=residual)) +
+  geom_histogram(bins=50)
+
+# The distribution fit normality
+```
+#### The distribution fit normality
+
+#### Equality of variance of the residuals
+```{r}
+# Equality of variance of the residuals
+regression_point = get_regression_points(model)
+ggplot(regression_point, aes(x = counts_pictures, y = residual)) +
+  geom_point()+
+  geom_hline(yintercept = 0, col = "blue",size = 1)+
+  geom_vline(xintercept = 20, col = "red",size = 1)+
+  geom_vline(xintercept = 10, col = "purple",size = 1)
+
+mean_resid = mean(regression_point$residual)
+# The variances are equally around 0
+```
+#### The variances are equally around 0
+
+### in general, I think this model can be trusted.
+
+
+## 5. Hypothesis test
+
+### test if there is a difference in user age on the users with flirt interest on dating or without flirt interest on dating.
+### H0: there is no difference in ages between the two type of users.
+### H1: there is difference in ages between the two types of users.
+### alpha value: 0.05
+
+```{r}
+set.seed(100)
+null_distribution_users <- selecteduserdata %>% 
+  specify(formula = age ~ flirtInterests_date) %>% 
+  hypothesize(null = "independence") %>% 
+  generate(reps = 1000, type = "permute",) %>% 
+  calculate(stat = "diff in means", order = c("TRUE", "FALSE"))
+null_distribution_users
+
+```
+
+```{r}
+
+obs_diff_means <- selecteduserdata %>%
+  specify(formula = age ~ flirtInterests_date) %>%
+  calculate(stat = "diff in means", order = c("TRUE", "FALSE"))
+obs_diff_means
+
+visualize(null_distribution_users, bins = 10)+
+  shade_p_value(obs_stat = obs_diff_means, direction = "both")
+
+null_distribution_users %>%
+  get_p_value(obs_stat = obs_diff_means, direction = "both")
+```
+
+#### p value is small and almost 0. The alpha value = 0.05, which is largely bigger than the p value we get; So no reject to H0 hypothesis, and there is no difference between user age in the two different types of users.
+
